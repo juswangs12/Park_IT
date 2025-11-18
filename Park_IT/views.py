@@ -237,6 +237,7 @@ class DashboardView(View):
         }
         return render(request, 'dashboard.html', context)
 
+
 class UserDashboardView(View):
     def get(self, request):
         if 'access_token' not in request.session:
@@ -245,6 +246,8 @@ class UserDashboardView(View):
 
         try:
             user_id = request.session.get('user_id')
+
+            # 1. Query Supabase
             user_response = supabase.table('users').select(
                 'first_name, last_name, email, student_employee_id, role_id'
             ).eq('id', user_id).execute()
@@ -255,14 +258,14 @@ class UserDashboardView(View):
 
             user_data = user_response.data[0]
 
-            # Fetch role
+            # 2. Fetch role
             role_response = supabase.table('roles').select('role_name').eq(
                 'role_id', user_data['role_id']
             ).execute()
 
             role_name = role_response.data[0]['role_name'] if role_response.data else 'student'
 
-            # Prevent admin from entering student dashboard
+            # 3. Prevent admin from entering student dashboard
             if role_name == 'admin':
                 return redirect('dashboard')
 
@@ -276,6 +279,8 @@ class UserDashboardView(View):
             }
 
         except Exception as e:
+            # This print statement will show you the EXACT error in your terminal
+            print(f"DASHBOARD ERROR: {str(e)}")
             messages.error(request, f'Error loading dashboard: {str(e)}')
             return redirect('home')
 
@@ -323,6 +328,66 @@ class ParkingSpacesView(View):
                 'username': 'No username'
             }
         return render(request, 'parking_spaces.html', context)
+
+
+class StudentParkingSpacesView(View):
+    def get(self, request):
+        # 1. Check for access token in session
+        if 'access_token' not in request.session:
+            messages.error(request, 'Please log in first.')
+            return redirect('signin', portal='student')
+
+        try:
+            user_id = request.session.get('user_id')
+
+            # 2. Fetch User Details
+            user_response = supabase.table('users').select(
+                'first_name, last_name, email, student_employee_id, role_id').eq('id', user_id).execute()
+
+            if user_response.data:
+                user_data = user_response.data[0]
+                role_id = user_data['role_id']
+
+                # 3. Fetch Role Name
+                role_response = supabase.table('roles').select('role_name').eq('role_id', role_id).execute()
+                role_name = role_response.data[0]['role_name'] if role_response.data else 'student'
+
+                # 4. Optional: Fetch Parking Spaces Data
+                # If you need to list parking spots, add that query here.
+                # parking_response = supabase.table('parking_spaces').select('*').execute()
+                # parking_data = parking_response.data
+
+                context = {
+                    'role': role_name,
+                    'full_name': f"{user_data['first_name']} {user_data['last_name']}",
+                    'first_name': user_data['first_name'],
+                    'last_name': user_data['last_name'],
+                    'email': user_data['email'],
+                    'username': user_data['student_employee_id'],
+                    # 'parking_spaces': parking_data  <-- Add this if you fetched parking data
+                }
+            else:
+                context = {
+                    'role': 'student',
+                    'full_name': 'User',
+                    'email': 'No email',
+                    'username': 'No username'
+                }
+
+        except ValueError:
+            messages.error(request, 'Server configuration error. Please contact administrator.')
+            return redirect('home')
+
+        except Exception as e:
+            messages.error(request, f'Database error: {str(e)}')
+            context = {
+                'role': 'student',
+                'full_name': 'User',
+                'email': 'No email',
+                'username': 'No username'
+            }
+
+        return render(request, 'stud_parking_spaces.html', context)
 
 class ManageUsersView(View):
     def get(self, request):
